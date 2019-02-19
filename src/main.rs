@@ -1,16 +1,13 @@
 use rand::rngs::SmallRng;
-// use std::iter;
 use rand::SeedableRng;
 use rand::Rng;
-// use std::f64;
 
 extern crate rand;
-
 extern crate cairo;
+
 use cairo::{ImageSurface, Format, Context};
 use std::fs::File;
-
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 
 
 fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
@@ -59,6 +56,7 @@ impl Renderer {
     fn with_width_height(width: i32, height: i32) -> Renderer {
         let surface = ImageSurface::create(Format::ARgb32, width, height).unwrap();
         let context = Context::new(&surface);
+        context.set_font_size(20.0);
         Renderer {
             surface,
             context,
@@ -77,7 +75,7 @@ impl Renderer {
         self.context.paint();
     }
 
-    fn draw_func(&self, ys: &Vec<f64>) {
+    fn draw_func(&self, ys: &Vec<f64>, xs: Option<Vec<usize>>) {
         let (w, h) = (self.width as f64, self.height as f64);
         let (origin_x, origin_y) = (5.0, h / 2.0);
         let max_y = ys.iter().fold(std::f64::NEG_INFINITY, |a, &b| a.max(b));
@@ -94,8 +92,28 @@ impl Renderer {
             self.context.line_to(x, y);
             x += step_x;
         }
-
         self.context.stroke();
+
+        self.context.set_source_rgb(0.0, 0.0, 1.0);
+        let y_amount = 4 as f64;
+        let step_y = h / 2.0 / (y_amount + 1.0);
+        let y_step = max_y / (y_amount + 1.0);
+        let mut y = y_step * y_amount;
+        for i in 1..=4 {
+            self.context.move_to(7.0, i as f64 * step_y);
+            self.context.show_text(&(y as i32).to_string());
+            y -= y_step;
+        }
+        self.context.stroke();
+
+        if let Some(xs) = xs {
+            self.context.set_source_rgb(0.0, 0.0, 1.0);
+            for (index, x) in xs.into_iter().enumerate().step_by(2) {
+                self.context.move_to(5.0 + index as f64 * step_x, origin_y - 5.0);
+                self.context.show_text(&x.to_string());
+            }
+            self.context.stroke();
+        }
     }
 
     fn draw_axis(&self) {
@@ -116,33 +134,41 @@ impl Renderer {
 }
 
 fn main() {
-    const HARMONICS_COUNT:    usize = 400;
+    const HARMONICS_COUNT:    usize = 2000;
     const MARGINAL_FREQUENCY: usize = 2700;
-    const TIMESPAN:           usize = 64;
+    const TIMESPAN:           usize = 256;
     let seed = [6,4,3,8, 7,9,8,10, 14,18,12,12, 14,15,16,17];
     let mut rng = SmallRng::from_seed(seed);
 
     let timespan_step = 32;
     let timespan_max = 1024;
-    for timespan in (timespan_step..).step_by(timespan_step).take_while(|span| span <= &timespan_max) {
+    let mut times = Vec::new();
+    let timepoints: Vec<_> = (timespan_step..).step_by(timespan_step)
+        .take_while(|span| span <= &timespan_max).collect();
+    for timespan in timepoints.iter() {
         let begin = Instant::now();
-        let signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, timespan);
+        let signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
         let elapsed = begin.elapsed().as_millis();
+        times.push(elapsed as f64);
         println!("Elapsed for timespan={} : {}ms", timespan, elapsed);
 
         let mean = mean(&signal);
         let dispersion = dispersion(&signal, mean);
         println!("Mean = {}", mean);
         println!("Dispersion = {}", dispersion);
-
-        if timespan == timespan_max / 4 {
-            const WIDTH: i32 = 1100;
-            const HEIGHT: i32 = 600;
-            let renderer = Renderer::with_width_height(WIDTH, HEIGHT);
-            renderer.clear();
-            renderer.draw_axis();
-            renderer.draw_func(&signal);
-            renderer.export_to("out.png");
-        }
     }
+
+    let signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, TIMESPAN);
+    const WIDTH: i32 = 1100;
+    const HEIGHT: i32 = 600;
+    let renderer = Renderer::with_width_height(WIDTH, HEIGHT);
+    renderer.clear();
+    renderer.draw_axis();
+    renderer.draw_func(&signal, None);
+    renderer.export_to("out.png");
+
+    renderer.clear();
+    renderer.draw_axis();
+    renderer.draw_func(&times, Some(timepoints));
+    renderer.export_to("times.png");
 }
