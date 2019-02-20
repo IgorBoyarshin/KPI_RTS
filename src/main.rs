@@ -26,10 +26,17 @@ fn construct_signal(rng: &mut SmallRng,
                     harmonics_count: usize,
                     marginal_frequency: usize,
                     timespan: usize) -> Vec<f64> {
-    const MAX_AMPLITUDE: f64 = 10.0;
+    const MAX_AMPLITUDE: f64 = 1.0;
     const MAX_PHASE:     f64 = 2.0 * std::f64::consts::PI;
-    let frequency_step = marginal_frequency / harmonics_count;
-    (frequency_step..).step_by(frequency_step).take(harmonics_count)
+    let frequency_step = marginal_frequency as f64 / harmonics_count as f64;
+    let mut freqs = Vec::new();
+    let mut last = frequency_step;
+    for _ in 0..harmonics_count {
+        freqs.push(last);
+        last += frequency_step;
+    }
+    // (frequency_step..).step_by(frequency_step).take(harmonics_count)
+    freqs.into_iter()
         .map(|frequency| {
             let frequency = frequency as f64;
             let amplitude = rng.gen::<f64>() * MAX_AMPLITUDE;
@@ -101,14 +108,16 @@ impl Renderer {
         let mut y = y_step * y_amount;
         for i in 1..=4 {
             self.context.move_to(7.0, i as f64 * step_y);
-            self.context.show_text(&(y as i32).to_string());
+            let mut text = y.to_string();
+            text.truncate(5);
+            self.context.show_text(&text);
             y -= y_step;
         }
         self.context.stroke();
 
         if let Some(xs) = xs {
             self.context.set_source_rgb(0.0, 0.0, 1.0);
-            for (index, x) in xs.into_iter().enumerate().step_by(2) {
+            for (index, x) in xs.into_iter().enumerate().step_by(10) {
                 self.context.move_to(5.0 + index as f64 * step_x, origin_y - 5.0);
                 self.context.show_text(&x.to_string());
             }
@@ -134,23 +143,23 @@ impl Renderer {
 }
 
 fn main() {
-    const HARMONICS_COUNT:    usize = 2000;
+    const HARMONICS_COUNT:    usize = 10;
     const MARGINAL_FREQUENCY: usize = 2700;
-    const TIMESPAN:           usize = 256;
+    const TIMESPAN:           usize = 5000;
     let seed = [6,4,3,8, 7,9,8,10, 14,18,12,12, 14,15,16,17];
     let mut rng = SmallRng::from_seed(seed);
 
     let timespan_step = 32;
-    let timespan_max = 1024;
+    let timespan_max = TIMESPAN;
     let mut times = Vec::new();
     let timepoints: Vec<_> = (timespan_step..).step_by(timespan_step)
         .take_while(|span| span <= &timespan_max).collect();
     for timespan in timepoints.iter() {
         let begin = Instant::now();
         let signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
-        let elapsed = begin.elapsed().as_millis();
+        let elapsed = begin.elapsed().as_micros();
         times.push(elapsed as f64);
-        println!("Elapsed for timespan={} : {}ms", timespan, elapsed);
+        println!("Elapsed for timespan={} : {}micros", timespan, elapsed);
 
         let mean = mean(&signal);
         let dispersion = dispersion(&signal, mean);
@@ -172,3 +181,4 @@ fn main() {
     renderer.draw_func(&times, Some(timepoints));
     renderer.export_to("times.png");
 }
+
