@@ -10,9 +10,9 @@ use std::fs::File;
 use std::time::{Instant};
 
 
-fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
-    v.iter().map(|x| (x - mean)*(x - mean)).sum::<f64>() / ((v.len() - 1) as f64)
-}
+// fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
+//     v.iter().map(|x| (x - mean)*(x - mean)).sum::<f64>() / ((v.len() - 1) as f64)
+// }
 
 fn mean(v: &Vec<f64>) -> f64 {
     v.iter().sum::<f64>() / v.len() as f64
@@ -170,7 +170,7 @@ pub fn lab2_work() {
     let signal_y = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, TIMESPAN);
     let mean_x = mean(&signal_x);
     let mean_y = mean(&signal_y);
-    let disp = dispersion(&signal_x, mean_x);
+    // let disp = dispersion(&signal_x, mean_x);
     let correlation_xx = correlation(&signal_x, mean_x, &signal_x, mean_x);
     let correlation_xy = correlation(&signal_x, mean_x, &signal_y, mean_y);
     let correlation_yy = correlation(&signal_y, mean_y, &signal_y, mean_y);
