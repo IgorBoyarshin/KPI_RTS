@@ -10,9 +10,9 @@ use std::fs::File;
 use std::time::{Instant};
 
 
-// fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
-//     v.iter().map(|x| (x - mean)*(x - mean)).sum::<f64>() / ((v.len() - 1) as f64)
-// }
+fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
+    v.iter().map(|x| (x - mean)*(x - mean)).sum::<f64>() / ((v.len() - 1) as f64)
+}
 
 fn mean(v: &Vec<f64>) -> f64 {
     v.iter().sum::<f64>() / v.len() as f64
@@ -150,26 +150,27 @@ impl Renderer {
 pub fn lab2_work() {
     const HARMONICS_COUNT:    usize = 10; // n
     const MARGINAL_FREQUENCY: usize = 2700;
-    const TIMESPAN:           usize = 4*256; // N
+    const TIMESPAN:           usize = 256; // N
     let seed = [6,4,3,8, 7,9,8,10, 14,18,12,12, 14,15,16,17];
     let mut rng = SmallRng::from_seed(seed);
 
-    // const TIMESPAN_STEP: usize = 32;
-    // let mut times = Vec::new();
-    // let timepoints: Vec<_> = (TIMESPAN_STEP..).step_by(TIMESPAN_STEP)
-    //     .take_while(|span| span <= &TIMESPAN).collect();
-    // for timespan in timepoints.iter() {
-    //     let begin = Instant::now();
-    //     let signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
-    //     let elapsed = begin.elapsed().as_micros();
-    //     times.push(elapsed as f64);
-    //     println!("Elapsed for timespan={} : {}micros", timespan, elapsed);
-    // }
+    const TIMESPAN_STEP: usize = 32;
+    let mut times = Vec::new();
+    let timepoints: Vec<_> = (TIMESPAN_STEP..).step_by(TIMESPAN_STEP)
+        .take_while(|&span| span <= TIMESPAN).collect();
+    for timespan in timepoints.iter() {
+        let begin = Instant::now();
+        let _signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
+        let elapsed = begin.elapsed().as_micros();
+        times.push(elapsed as f64);
+        println!("Elapsed for timespan={} : {}micros", timespan, elapsed);
+    }
 
     let signal_x = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, TIMESPAN);
     let signal_y = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, TIMESPAN);
     let mean_x = mean(&signal_x);
     let mean_y = mean(&signal_y);
+    let disp = dispersion(&signal_x, mean_x);
     let correlation_xx = correlation(&signal_x, mean_x, &signal_x, mean_x);
     let correlation_xy = correlation(&signal_x, mean_x, &signal_y, mean_y);
     let correlation_yy = correlation(&signal_y, mean_y, &signal_y, mean_y);
@@ -205,10 +206,11 @@ pub fn lab2_work() {
         renderer.draw_func(&correlation_yy, None);
         renderer.export_to("correlation_yy.png");
     }
-
-    // renderer.clear();
-    // renderer.draw_axis();
-    // renderer.draw_func(&times, Some(timepoints));
-    // renderer.export_to("times.png");
+    {
+        renderer.clear();
+        renderer.draw_axis();
+        renderer.draw_func(&times, Some(timepoints));
+        renderer.export_to("times.png");
+    }
 }
 
