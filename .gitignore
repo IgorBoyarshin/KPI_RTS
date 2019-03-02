@@ -1,2 +1,3 @@
 /target
+*.png
 **/*.rs.bk
