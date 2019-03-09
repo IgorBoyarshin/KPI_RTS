@@ -1,30 +1,55 @@
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 use rand::Rng;
-use std::collections::HashMap;
 
 extern crate rand;
 extern crate cairo;
+extern crate num;
 
 use cairo::{ImageSurface, Format, Context};
 use std::fs::File;
 use std::time::{Instant};
+use num::complex::Complex;
 
 
 // fn dispersion(v: &Vec<f64>, mean: f64) -> f64 {
 //     v.iter().map(|x| (x - mean)*(x - mean)).sum::<f64>() / ((v.len() - 1) as f64)
 // }
 
-fn mean(v: &Vec<f64>) -> f64 {
-    v.iter().sum::<f64>() / v.len() as f64
-}
+// fn mean(v: &Vec<f64>) -> f64 {
+//     v.iter().sum::<f64>() / v.len() as f64
+// }
+//
+// fn correlation(v1: &Vec<f64>, mean1: f64, v2: &Vec<f64>, mean2: f64) -> Vec<f64> {
+//     (0..(v1.len() / 2))
+//         .map(|tau| (v1.iter().zip(v2.iter().skip(tau)), v1.len() - tau))
+//         .map(|(v, _size)| (v.map(|(a, b)| (a - mean1) * (b - mean2)), _size))
+//         .map(|(v, size)| v.sum::<f64>() / (size - 1) as f64)
+//         .collect::<Vec<f64>>()
+// }
 
-fn correlation(v1: &Vec<f64>, mean1: f64, v2: &Vec<f64>, mean2: f64) -> Vec<f64> {
-    (0..(v1.len() / 2))
-        .map(|tau| (v1.iter().zip(v2.iter().skip(tau)), v1.len() - tau))
-        .map(|(v, _size)| (v.map(|(a, b)| (a - mean1) * (b - mean2)), _size))
-        .map(|(v, size)| v.sum::<f64>() / (size - 1) as f64)
-        .collect::<Vec<f64>>()
+fn fast_fourier(signal: &Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+    if signal.len() == 2 {
+        return vec![signal[0] + signal[1], signal[0] - signal[1]]
+    }
+
+    let even = fast_fourier(&signal.iter().step_by(2).map(|x| *x).collect());
+    let odd = fast_fourier(&signal.iter().skip(1).step_by(2).map(|x| *x).collect());
+    #[allow(non_snake_case)]
+    let N = signal.len();
+    let w = |k| {
+        if k % N == 0 { Complex::new(1.0, 0.0) }
+        else {
+            let arg = -2.0 * std::f64::consts::PI / N as f64 * k as f64;
+            Complex::new(arg.cos(), arg.sin())
+        }
+    };
+    let mut result = Vec::new();
+    result.append(&mut even.iter().zip(odd.iter()).enumerate()
+        .map(|(i, (e, o))| e + w(i) * o).collect::<Vec<_>>());
+    result.append(&mut even.iter().zip(odd.iter()).enumerate()
+        .map(|(i, (e, o))| e - w(i) * o).collect::<Vec<_>>());
+    result
 }
 
 fn discrete_fourier(signal: &Vec<f64>) -> Vec<f64> {
@@ -36,39 +61,6 @@ fn discrete_fourier(signal: &Vec<f64>) -> Vec<f64> {
             .map(|(k, x)| {
                 let arg = 2.0 * std::f64::consts::PI / N as f64 * p as f64 * k as f64;
                 (x * arg.cos(), x * arg.sin())
-            })
-            .fold((0.0, 0.0), |(re, im), (next_re, next_im)| (re + next_re, im + next_im));
-        (re*re + im*im).sqrt()
-    })
-    // .map(|f| f * 2.0 / N as f64)
-    .collect()
-}
-
-fn discrete_fourier_2(signal: &Vec<f64>) -> Vec<f64> {
-    #[allow(non_snake_case)]
-    let N = signal.len();
-    let mut table: HashMap<u32, (f64, f64)> = HashMap::new();
-    for p in 0..N {
-        for k in 0..N {
-            let arg = 2.0 * std::f64::consts::PI / N as f64 * p as f64 * k as f64;
-            let key = (k * p % N) as u32;
-            if !table.contains_key(&key) {
-                let value = (arg.cos(), arg.sin());
-                table.insert(key, value);
-            }
-        }
-    }
-
-    // (0..N / 2).map(|p| {
-    (0..N).map(|p| {
-        let (re, im) = signal.iter().enumerate()
-            .map(|(k, x)| {
-                // let arg = 2.0 * std::f64::consts::PI / N as f64 * p as f64 * k as f64;
-                // (x * arg.cos(), x * arg.sin())
-                // let (c, s) = table[p][k];
-                let key = (k * p % N) as u32;
-                let (c, s) = table.get(&key).unwrap();
-                (x * c, x * s)
             })
             .fold((0.0, 0.0), |(re, im), (next_re, next_im)| (re + next_re, im + next_im));
         (re*re + im*im).sqrt()
@@ -92,7 +84,6 @@ fn construct_signal(rng: &mut SmallRng,
         .map(|frequency| {
             let frequency = frequency as f64;
             let amplitude = rng.gen::<f64>() * MAX_AMPLITUDE;
-            dbg!(amplitude);
             let phase     = rng.gen::<f64>() * MAX_PHASE;
             (frequency, amplitude, phase)
         })
@@ -199,29 +190,41 @@ impl Renderer {
     }
 }
 
-pub fn lab3_work() {
+pub fn lab4_work() {
     const HARMONICS_COUNT:    usize = 10; // n
     const MARGINAL_FREQUENCY: usize = 2700;
-    const TIMESPAN:           usize = 2560; // N
+    const TIMESPAN:           usize = 8*256; // N
     let seed = [6,4,3,8, 7,9,8,10, 14,18,12,12, 14,15,16,17];
     let mut rng = SmallRng::from_seed(seed);
 
-    // const TIMESPAN_STEP: usize = 32;
-    // let mut times = Vec::new();
+    const TIMESPAN_STEP: usize = 32;
+    let mut times = Vec::new();
     // let timepoints: Vec<_> = (TIMESPAN_STEP..).step_by(TIMESPAN_STEP)
     //     .take_while(|&span| span <= TIMESPAN).collect();
-    // for timespan in timepoints.iter() {
-    //     let begin = Instant::now();
-    //     let _signal = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
-    //     let elapsed = begin.elapsed().as_micros();
-    //     times.push(elapsed as f64);
-    //     println!("Elapsed for timespan={} : {}micros", timespan, elapsed);
-    // }
+    let timepoints: Vec<_> = std::iter::repeat(2)
+        .scan(32, |acc, curr| {*acc *= curr; Some(*acc)})
+        .take_while(|&x| x <= TIMESPAN)
+        .collect();
+
+    for timespan in timepoints.iter() {
+        let signal_x = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, *timespan);
+        let begin = Instant::now();
+            let _fast_fourier_x = fast_fourier(&signal_x.iter().map(|x| Complex::new(*x, 0.0)).collect());
+        let elapsed = begin.elapsed().as_micros();
+        times.push(elapsed as f64);
+        // println!("Elapsed for timespan={} : {}micros", timespan, elapsed);
+    }
 
     let signal_x = construct_signal(&mut rng, HARMONICS_COUNT, MARGINAL_FREQUENCY, TIMESPAN);
+        let begin = Instant::now();
     let discrete_fourier_x = discrete_fourier(&signal_x);
-    let discrete_fourier_x_2 = discrete_fourier_2(&signal_x);
-
+        let elapsed = begin.elapsed().as_micros();
+        println!("Elapsed for discrete: {}micros", elapsed);
+        let begin = Instant::now();
+    let fast_fourier_x = fast_fourier(&signal_x.iter().map(|x| Complex::new(*x, 0.0)).collect())
+        .into_iter().map(|c| c.norm_sqr().sqrt()).collect();
+        let elapsed = begin.elapsed().as_micros();
+        println!("Elapsed for fast: {}micros", elapsed);
 
     let renderer = Renderer::with_width_height(1100, 600);
     {
@@ -236,11 +239,17 @@ pub fn lab3_work() {
         renderer.draw_func(&discrete_fourier_x, None);
         renderer.export_to("discrete_fourier.png");
     }
-    // {
-    //     renderer.clear();
-    //     renderer.draw_axis();
-    //     renderer.draw_func(&times, Some(timepoints));
-    //     renderer.export_to("times.png");
-    // }
+    {
+        renderer.clear();
+        renderer.draw_axis();
+        renderer.draw_func(&fast_fourier_x, None);
+        renderer.export_to("fast_fourier.png");
+    }
+    {
+        renderer.clear();
+        renderer.draw_axis();
+        renderer.draw_func(&times, Some(timepoints));
+        renderer.export_to("times.png");
+    }
 }
 
