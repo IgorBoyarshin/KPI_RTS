@@ -1,6 +1,6 @@
-mod lab4;
-use crate::lab4::lab4_work;
+mod lab5;
+use crate::lab5::lab5_work;
 
 fn main() {
-    lab4_work();
+    lab5_work();
 }
