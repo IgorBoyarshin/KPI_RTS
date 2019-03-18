@@ -61,11 +61,11 @@ struct SystemTask {
 }
 
 impl SystemTask {
-    fn more_important_than(&self, other: &SystemTask, cmp_by_deadline: bool) -> bool {
+    fn less_important_than(&self, other: &SystemTask, cmp_by_deadline: bool) -> bool {
         if cmp_by_deadline {
-            self.deadline < other.deadline
+            self.deadline > other.deadline
         } else {
-            self.rang_priority() > other.rang_priority()
+            self.rang_priority() < other.rang_priority()
         }
     }
 
@@ -131,7 +131,7 @@ impl System {
             SystemType::RateMonotonic => false,
             SystemType::EarliestDeadlineFirst => true,
         };
-        while index > 0 && (new_task.more_important_than(
+        while index > 0 && (new_task.less_important_than(
             &self.tasks[index - 1], cmp_by_deadline)) { index -= 1 };
         self.tasks.insert(index, new_task);
     }
